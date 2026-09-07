@@ -11,35 +11,36 @@ import openpyxl
 import streamlit as st
 
 # ==========================================================
-# 1. FUNCIÓN DE RELLENO (HOJA: Castellano 62353)
+# 1. FUNCIÓN DE RELLENO (PRESERVANDO FORMATO Y CONFIGURACIÓN)
 # ==========================================================
 def rellenar_protocolo(wb, datos_equipo, equipos_medida, tecnico, cliente, fecha_asignada, num_ot):
     HOJA_OBJETIVO = "Castellano 62353"
-    ws = wb[HOJA_OBJETIVO] if HOJA_OBJETIVO in wb.sheetnames else wb.active
-
-    # Eliminar las demás hojas para que la conversión a PDF exporte solo esta hoja
-    for sheet in wb.sheetnames:
-        if sheet != ws.title:
-            del wb[sheet]
+    
+    # Seleccionar la hoja objetivo sin borrar las demás para no corromper la plantilla
+    if HOJA_OBJETIVO in wb.sheetnames:
+        ws = wb[HOJA_OBJETIVO]
+        wb.active = ws  # Dejarla como hoja visible por defecto
+    else:
+        ws = wb.active
 
     fecha_str = fecha_asignada.strftime("%d/%m/%Y")
 
     # --- Cabecera: Cliente, OT, Técnico, Fecha ---
-    ws["D9"] = cliente
-    ws["D10"] = num_ot
-    ws["D11"] = tecnico
-    ws["D12"] = fecha_str
+    ws["D9"].value = cliente
+    ws["D10"].value = num_ot
+    ws["D11"].value = tecnico
+    ws["D12"].value = fecha_str
 
     # --- Cabecera: Equipo, Marca, Modelo, Nº de Serie ---
-    ws["N9"] = str(datos_equipo.get("Descripción Activo Fijo", "DESFIBRILADOR"))
-    ws["N10"] = str(datos_equipo.get("Marca", ""))
-    ws["N11"] = str(datos_equipo.get("Modelo", ""))
-    ws["N12"] = str(datos_equipo.get("Nº de Serie", ""))
+    ws["N9"].value = str(datos_equipo.get("Descripción Activo Fijo", "DESFIBRILADOR"))
+    ws["N10"].value = str(datos_equipo.get("Marca", ""))
+    ws["N11"].value = str(datos_equipo.get("Modelo", ""))
+    ws["N12"].value = str(datos_equipo.get("Nº de Serie", ""))
 
     # --- Cabecera: Inventario, Ubicación (Texto), GFH (Código) ---
-    ws["X9"] = str(datos_equipo.get("Nº Activo Fijo", ""))
-    ws["X10"] = str(datos_equipo.get("Descripción Ubicación Física", ""))
-    ws["X11"] = str(datos_equipo.get("Ubicación Física", ""))
+    ws["X9"].value = str(datos_equipo.get("Nº Activo Fijo", ""))
+    ws["X10"].value = str(datos_equipo.get("Descripción Ubicación Física", ""))
+    ws["X11"].value = str(datos_equipo.get("Ubicación Física", ""))
 
     # --- Equipos de medida (Filas 67 a 70) ---
     for idx, eq_m in enumerate(equipos_medida[:4]):
@@ -50,11 +51,16 @@ def rellenar_protocolo(wb, datos_equipo, equipos_medida, tecnico, cliente, fecha
         n_serie = str(eq_m.get("Número de Serie del Activo", eq_m.get("Activo", ""))).strip()
 
         if not ws[f"A{fila}"].value:
-            ws[f"A{fila}"] = denominacion
+            ws[f"A{fila}"].value = denominacion
 
-        ws[f"H{fila}"] = marca
-        ws[f"M{fila}"] = modelo
-        ws[f"R{fila}"] = n_serie
+        ws[f"H{fila}"].value = marca
+        ws[f"M{fila}"].value = modelo
+        ws[f"R{fila}"].value = n_serie
+
+    # Garantizar que el área de impresión y ajuste de página no se alteren
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
 
     return wb
 
@@ -180,7 +186,7 @@ if st.button("🚀 Iniciar Generación", type="primary"):
 
                         status.text(f"Generando {idx+1}/{total_equipos}: {nombre_base} (OT: {num_ot})...")
 
-                        # Rellenar Excel
+                        # Rellenar Excel preservando estructura
                         wb = openpyxl.load_workbook(temp_plantilla)
                         wb = rellenar_protocolo(
                             wb, datos_eq, equipos_medida_seleccionados,
@@ -191,7 +197,7 @@ if st.button("🚀 Iniciar Generación", type="primary"):
                         wb.save(path_xlsx)
                         wb.close()
 
-                        # Convertir a PDF en la nube
+                        # Convertir a PDF
                         exportar_a_pdf(path_xlsx, tmpdir)
                         path_pdf = os.path.join(tmpdir, f"{nombre_base}.pdf")
 
